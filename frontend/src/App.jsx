@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import axios from 'axios'
 import Navbar from './components/Navbar'
 import Home from './pages/Home'
 import DonorRegistration from './pages/DonorRegistration'
@@ -6,6 +7,10 @@ import SearchDonors from './pages/SearchDonors'
 import RequestBlood from './pages/RequestBlood'
 import AdminLogin from './pages/AdminLogin'
 import AdminDashboard from './pages/AdminDashboard'
+import UserLogin from './pages/UserLogin'
+import UserRegister from './pages/UserRegister'
+
+axios.defaults.withCredentials = true
 
 function App() {
   return (
@@ -18,6 +23,8 @@ function App() {
             <Route path="/register" element={<DonorRegistration />} />
             <Route path="/search" element={<SearchDonors />} />
             <Route path="/request" element={<RequestBlood />} />
+            <Route path="/user/login" element={<UserLogin />} />
+            <Route path="/user/register" element={<UserRegister />} />
             <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/admin" element={<AdminDashboard />} />
           </Routes>

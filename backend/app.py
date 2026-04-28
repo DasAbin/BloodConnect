@@ -1,9 +1,9 @@
 import os
 from flask import Flask, request, jsonify, session
 from flask_cors import CORS
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 from sqlalchemy import text
-from models import db, Donor, BloodRequest, DonationHistory, Admin, BloodInventory
+from models import db, Donor, BloodRequest, DonationHistory, Admin, BloodInventory, User
 from db_seed import seed_db
 from datetime import datetime
 
@@ -22,13 +22,15 @@ with app.app_context():
 
 # --- Helpers ---
 def donor_to_dict(donor):
+    # Privacy check: Only show full phone to logged in users or admins
+    is_authorized = 'admin_id' in session or 'user_id' in session
     return {
         'donor_id': donor.donor_id,
         'name': donor.name,
         'age': donor.age,
         'gender': donor.gender,
         'blood_group': donor.blood_group,
-        'phone': donor.phone if donor.is_available else None, # only if available
+        'phone': donor.phone if (donor.is_available and is_authorized) else (donor.phone[:4] + "******" if donor.is_available else None),
         'city': donor.city,
         'last_donation_date': donor.last_donation_date.isoformat() if donor.last_donation_date else None,
         'is_available': donor.is_available,
@@ -218,6 +220,45 @@ def admin_logout():
 def admin_check():
     if 'admin_id' in session:
         return jsonify({'logged_in': True})
+    return jsonify({'logged_in': False}), 401
+
+# --- User API ---
+
+@app.route('/api/user/register', methods=['POST'])
+def user_register():
+    data = request.json
+    if User.query.filter_by(email=data['email']).first():
+        return jsonify({'message': 'Email already registered'}), 400
+    
+    new_user = User(
+        name=data['name'],
+        email=data['email'],
+        password_hash=generate_password_hash(data['password'])
+    )
+    db.session.add(new_user)
+    db.session.commit()
+    return jsonify({'message': 'User registered successfully'}), 201
+
+@app.route('/api/user/login', methods=['POST'])
+def user_login():
+    data = request.json
+    user = User.query.filter_by(email=data['email']).first()
+    if user and check_password_hash(user.password_hash, data['password']):
+        session['user_id'] = user.user_id
+        session['user_name'] = user.name
+        return jsonify({'message': 'Logged in successfully', 'name': user.name}), 200
+    return jsonify({'message': 'Invalid credentials'}), 401
+
+@app.route('/api/user/logout', methods=['POST'])
+def user_logout():
+    session.pop('user_id', None)
+    session.pop('user_name', None)
+    return jsonify({'message': 'Logged out successfully'}), 200
+
+@app.route('/api/user/check', methods=['GET'])
+def user_check():
+    if 'user_id' in session:
+        return jsonify({'logged_in': True, 'name': session.get('user_name')})
     return jsonify({'logged_in': False}), 401
 
 if __name__ == '__main__':

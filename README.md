@@ -59,6 +59,14 @@ erDiagram
         string username UK
         string password_hash
     }
+
+    USERS {
+        int user_id PK
+        string name
+        string email UK
+        string password_hash
+        datetime created_at
+    }
 ```
 
 ### Table Definitions & Constraints
@@ -68,6 +76,15 @@ erDiagram
 3.  **Donation History**: A junction-style table that logs every donation event, linking a `Donor` to a specific `BloodRequest` (if applicable).
 4.  **Blood Inventory**: Maintains real-time stock levels for each blood group.
 5.  **Admins**: Stores hashed credentials for the management portal.
+6.  **Users (Patients/Seekers)**: Stores credentials for individuals seeking blood. This enables privacy controls.
+
+## 🔒 Privacy Protection
+
+To protect donor privacy, contact information (phone numbers) is **masked** for public viewers (e.g., `1234******`). Full contact details are only visible to:
+*   **Admins**: After logging into the Admin Portal.
+*   **Registered Users**: After logging into their Patient/Seeker account.
+
+This ensures that sensitive donor data is only accessible to authenticated individuals who have registered with the platform.
 
 ---
 

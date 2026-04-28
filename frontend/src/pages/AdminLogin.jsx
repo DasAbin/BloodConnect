@@ -15,6 +15,8 @@ const AdminLogin = () => {
         username,
         password
       }, { withCredentials: true })
+      localStorage.setItem('isAdmin', 'true')
+      window.dispatchEvent(new Event('authChange'))
       navigate('/admin')
     } catch (err) {
       setError('Invalid username or password')

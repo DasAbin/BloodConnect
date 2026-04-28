@@ -99,6 +99,11 @@ const SearchDonors = () => {
               <div className="mt-4 pt-4 border-t border-gray-100 flex items-center text-primary-600">
                 <Phone className="w-4 h-4 mr-2" />
                 <span className="font-medium">{donor.phone}</span>
+                {donor.phone.includes('*') && (
+                  <span className="ml-2 text-xs text-gray-500 italic cursor-help" title="Registration/Login required to view contact info">
+                    (Login to see)
+                  </span>
+                )}
               </div>
             )}
           </div>

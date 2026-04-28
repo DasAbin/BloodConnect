@@ -8,7 +8,7 @@ from db_seed import seed_db
 from datetime import datetime
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dbms_mini.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:251045@localhost/bloodconnect?charset=utf8mb4'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = 'supersecretkey'
 
@@ -20,47 +20,54 @@ with app.app_context():
     db.create_all()
     seed_db()
     
-    # Initialize SQLite triggers and views
+    # Initialize MySQL triggers and views
+    db.session.execute(text("DROP TRIGGER IF EXISTS prevent_negative_inventory"))
     db.session.execute(text("""
-        CREATE TRIGGER IF NOT EXISTS prevent_negative_inventory
+        CREATE TRIGGER prevent_negative_inventory
         BEFORE UPDATE ON blood_inventory
         FOR EACH ROW
-        WHEN NEW.units_available < 0
         BEGIN
-          SELECT RAISE(ABORT, 'Insufficient blood units in inventory');
+          IF NEW.units_available < 0 THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Insufficient blood units in inventory';
+          END IF;
         END;
     """))
+    
+    db.session.execute(text("DROP TRIGGER IF EXISTS donor_cooldown_after_donation"))
     db.session.execute(text("""
-        CREATE TRIGGER IF NOT EXISTS donor_cooldown_after_donation
+        CREATE TRIGGER donor_cooldown_after_donation
         AFTER INSERT ON donation_history
         FOR EACH ROW
         BEGIN
           UPDATE donors 
-          SET is_available = 0, last_donation_date = DATE('now')
+          SET is_available = 0, last_donation_date = CURDATE()
           WHERE donor_id = NEW.donor_id;
         END;
     """))
+    
+    db.session.execute(text("DROP TRIGGER IF EXISTS auto_increment_inventory"))
     db.session.execute(text("""
-        CREATE TRIGGER IF NOT EXISTS auto_increment_inventory
+        CREATE TRIGGER auto_increment_inventory
         AFTER INSERT ON donation_history
         FOR EACH ROW
         BEGIN
           UPDATE blood_inventory
           SET units_available = units_available + NEW.units_donated,
-              last_updated = DATETIME('now')
+              last_updated = NOW()
           WHERE blood_group = (SELECT blood_group FROM donors WHERE donor_id = NEW.donor_id);
         END;
     """))
+    
     db.session.execute(text("""
-        CREATE VIEW IF NOT EXISTS eligible_donors AS
+        CREATE OR REPLACE VIEW eligible_donors AS
         SELECT donor_id, name, blood_group, city, phone
         FROM donors
         WHERE is_available = 1
-        AND (last_donation_date IS NULL OR 
-             CAST((JULIANDAY('now') - JULIANDAY(last_donation_date)) AS INTEGER) >= 90);
+        AND (last_donation_date IS NULL OR DATEDIFF(CURDATE(), last_donation_date) >= 90);
     """))
+    
     db.session.execute(text("""
-        CREATE VIEW IF NOT EXISTS blood_shortage AS
+        CREATE OR REPLACE VIEW blood_shortage AS
         SELECT blood_group, units_available
         FROM blood_inventory
         WHERE units_available < 5;

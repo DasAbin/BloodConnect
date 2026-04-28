@@ -13,6 +13,8 @@ erDiagram
     DONORS ||--o{ DONATION_HISTORY : "donates"
     BLOOD_REQUESTS ||--o{ DONATION_HISTORY : "fulfills"
     BLOOD_GROUPS ||--|| BLOOD_INVENTORY : "tracks"
+    BLOOD_COMPATIBILITY }o--|| BLOOD_GROUPS : "defines"
+    USERS ||--o| DONORS : "linked_to"
 
     DONORS {
         int donor_id PK
@@ -24,6 +26,7 @@ erDiagram
         string city
         date last_donation_date
         boolean is_available
+        string approval_status
         datetime registered_at
     }
 
@@ -36,6 +39,7 @@ erDiagram
         string contact
         string urgency
         string status
+        int user_id FK
         datetime created_at
     }
 
@@ -54,6 +58,12 @@ erDiagram
         datetime last_updated
     }
 
+    BLOOD_COMPATIBILITY {
+        int id PK
+        string recipient_group
+        string donor_group
+    }
+
     ADMINS {
         int admin_id PK
         string username UK
@@ -65,18 +75,24 @@ erDiagram
         string name
         string email UK
         string password_hash
+        int donor_id FK
+        string blood_group
+        string city
         datetime created_at
     }
 ```
 
-### Table Definitions & Constraints
+### Table Definitions & Advanced Constraints
 
-1.  **Donors**: Stores donor profiles. Uses a boolean flag `is_available` to filter eligible donors.
-2.  **Blood Requests**: Tracks patient needs. Includes `urgency` levels (Critical, High, Normal) and `status` (Pending, Fulfilled).
-3.  **Donation History**: A junction-style table that logs every donation event, linking a `Donor` to a specific `BloodRequest` (if applicable).
-4.  **Blood Inventory**: Maintains real-time stock levels for each blood group.
-5.  **Admins**: Stores hashed credentials for the management portal.
-6.  **Users (Patients/Seekers)**: Stores credentials for individuals seeking blood. This enables privacy controls.
+1.  **Donors**: Stores donor profiles. Includes `approval_status` (Pending/Approved/Rejected) to ensure only verified donors appear in searches.
+2.  **Blood Requests**: Tracks patient needs. Requests from logged-in users are automatically verified against their profile data.
+3.  **Blood Compatibility**: A dedicated mapping table used by the **Smart Matching Algorithm** to determine compatible donor groups for any recipient.
+4.  **Stored Procedures**: 
+    *   `GetDonorEligibility`: Calculates real-time eligibility based on the 90-day cooldown rule and availability status.
+    *   `FindMatchingDonors`: Implements the smart matching logic, prioritizing local donors and ranking them by readiness.
+5.  **MySQL Triggers**:
+    *   `prevent_negative_inventory`: A `BEFORE UPDATE` trigger that enforces data integrity by blocking transactions that would result in negative stock.
+    *   `auto_increment_inventory`: An `AFTER INSERT` trigger on `DonationHistory` that automatically updates the bank stock.
 
 ## 🔒 Privacy Protection
 
@@ -90,7 +106,6 @@ This ensures that sensitive donor data is only accessible to authenticated indiv
 
 ## 🔍 Key SQL Implementations
 
-This project goes beyond simple CRUD by utilizing complex SQL queries for dashboard analytics.
 
 ### Analytics Aggregation
 The dashboard statistics are fetched using a single optimized SQL query involving subqueries and joins to provide a snapshot of the entire system state:

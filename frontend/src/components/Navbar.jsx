@@ -51,6 +51,11 @@ const Navbar = () => {
             <Link to="/request" className="text-gray-600 hover:text-primary-600 px-3 py-2 rounded-md font-medium transition-colors">
               Request Blood
             </Link>
+            {userName && !isAdmin && (
+              <Link to="/my-requests" className="text-gray-600 hover:text-primary-600 px-3 py-2 rounded-md font-medium transition-colors">
+                My Requests
+              </Link>
+            )}
             
             {userName || isAdmin ? (
               <div className="flex items-center space-x-4 ml-2 border-l pl-4">

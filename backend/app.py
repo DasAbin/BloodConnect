@@ -72,6 +72,53 @@ with app.app_context():
         FROM blood_inventory
         WHERE units_available < 5;
     """))
+    
+    db.session.execute(text("DROP PROCEDURE IF EXISTS GetDonorEligibility"))
+    db.session.execute(text("""
+        CREATE PROCEDURE GetDonorEligibility(IN p_donor_id INT)
+        BEGIN
+            SELECT 
+                donor_id, 
+                name, 
+                blood_group, 
+                last_donation_date,
+                IFNULL(DATEDIFF(CURDATE(), last_donation_date), 'Never') as days_since_donation,
+                CASE 
+                    WHEN is_available = 0 THEN 'Ineligible - Marked Unavailable'
+                    WHEN last_donation_date IS NULL THEN 'Eligible'
+                    WHEN DATEDIFF(CURDATE(), last_donation_date) >= 90 THEN 'Eligible'
+                    ELSE CONCAT('Ineligible - ', 90 - DATEDIFF(CURDATE(), last_donation_date), ' days remaining')
+                END as eligibility_status
+            FROM donors
+            WHERE donor_id = p_donor_id;
+        END;
+    """))
+    
+    db.session.execute(text("DROP PROCEDURE IF EXISTS FindMatchingDonors"))
+    db.session.execute(text("""
+        CREATE PROCEDURE FindMatchingDonors(IN p_blood_group VARCHAR(5), IN p_city VARCHAR(100))
+        BEGIN
+            SELECT 
+                d.donor_id, 
+                d.name, 
+                d.blood_group, 
+                d.phone, 
+                d.city, 
+                IFNULL(DATEDIFF(CURDATE(), d.last_donation_date), 'Never') as days_since_donation,
+                CASE 
+                    WHEN d.last_donation_date IS NULL THEN 'Never'
+                    ELSE DATE_FORMAT(d.last_donation_date, '%b %d, %Y')
+                END as last_donated
+            FROM donors d
+            JOIN blood_compatibility bc ON d.blood_group = bc.donor_group
+            WHERE bc.recipient_group = p_blood_group
+            AND d.is_available = 1
+            AND d.approval_status = 'approved'
+            AND (d.last_donation_date IS NULL OR DATEDIFF(CURDATE(), d.last_donation_date) >= 90)
+            AND (p_city IS NULL OR d.city = p_city)
+            ORDER BY d.last_donation_date ASC;
+        END;
+    """))
     db.session.commit()
 
 
@@ -89,6 +136,7 @@ def donor_to_dict(donor):
         'city': donor.city,
         'last_donation_date': donor.last_donation_date.isoformat() if donor.last_donation_date else None,
         'is_available': donor.is_available,
+        'approval_status': donor.approval_status,
         'registered_at': donor.registered_at.isoformat()
     }
 
@@ -126,6 +174,14 @@ def manage_donors():
         )
         db.session.add(new_donor)
         db.session.commit()
+        
+        # Link to logged in user if applicable
+        if 'user_id' in session:
+            user = User.query.get(session['user_id'])
+            if user:
+                user.donor_id = new_donor.donor_id
+                db.session.commit()
+                
         return jsonify(donor_to_dict(new_donor)), 201
 
 @app.route('/api/donors/<int:id>', methods=['PATCH', 'DELETE'])
@@ -135,6 +191,8 @@ def update_donor(id):
         data = request.json
         if 'is_available' in data:
             donor.is_available = data['is_available']
+        if 'approval_status' in data:
+            donor.approval_status = data['approval_status']
         db.session.commit()
         return jsonify(donor_to_dict(donor))
     elif request.method == 'DELETE':
@@ -148,7 +206,7 @@ def search_donors():
     city = request.args.get('city')
     available_only = request.args.get('available_only')
     
-    query = Donor.query
+    query = Donor.query.filter_by(approval_status='approved')
     if blood_group:
         query = query.filter_by(blood_group=blood_group)
     if city:
@@ -160,6 +218,13 @@ def search_donors():
     donors = query.all()
     return jsonify([donor_to_dict(d) for d in donors])
 
+@app.route('/api/donors/<int:id>/eligibility', methods=['GET'])
+def get_donor_eligibility(id):
+    result = db.session.execute(text("CALL GetDonorEligibility(:id)"), {'id': id}).fetchone()
+    if result:
+        return jsonify(dict(result._mapping))
+    return jsonify({'message': 'Donor not found'}), 404
+
 
 # --- Requests API ---
 
@@ -170,14 +235,29 @@ def manage_requests():
         return jsonify([request_to_dict(r) for r in reqs])
     elif request.method == 'POST':
         data = request.json
+        user_id = session.get('user_id')
+        
+        # If user is logged in, trust their profile data over the request body
+        if user_id:
+            user = User.query.get(user_id)
+            requester_name = user.name
+            blood_group = user.blood_group
+            city = user.city
+            contact = user.contact
+        else:
+            requester_name = data['requester_name']
+            blood_group = data['blood_group']
+            city = data['city']
+            contact = data['contact']
+
         new_req = BloodRequest(
-            requester_name=data['requester_name'],
-            blood_group=data['blood_group'],
+            requester_name=requester_name,
+            blood_group=blood_group,
             units_needed=data['units_needed'],
-            city=data['city'],
-            contact=data['contact'],
+            city=city,
+            contact=contact,
             urgency=data['urgency'],
-            user_id=session.get('user_id')
+            user_id=user_id
         )
         db.session.add(new_req)
         db.session.commit()
@@ -187,14 +267,39 @@ def manage_requests():
 def update_request(id):
     req = BloodRequest.query.get_or_404(id)
     data = request.json
+    
     if 'status' in data:
-        if data['status'] == 'fulfilled' and req.status != 'fulfilled':
-            inventory = BloodInventory.query.filter_by(blood_group=req.blood_group).first()
-            if inventory:
-                inventory.units_available -= req.units_needed
-        req.status = data['status']
-    db.session.commit()
+        new_status = data['status']
+        from_inventory = data.get('from_inventory', False)
+        
+        if new_status == 'fulfilled' and req.status != 'fulfilled':
+            if from_inventory:
+                try:
+                    inventory = BloodInventory.query.filter_by(blood_group=req.blood_group).first()
+                    if inventory:
+                        inventory.units_available -= req.units_needed
+                        db.session.commit()
+                except Exception as e:
+                    db.session.rollback()
+                    return jsonify({'message': 'Insufficient blood units in inventory'}), 400
+        
+        req.status = new_status
+        db.session.commit()
+        
     return jsonify(request_to_dict(req))
+
+@app.route('/api/requests/<int:id>/matches', methods=['GET'])
+def get_request_matches(id):
+    req = BloodRequest.query.get_or_404(id)
+    # Try with city
+    results = db.session.execute(text("CALL FindMatchingDonors(:bg, :city)"), 
+                                {'bg': req.blood_group, 'city': req.city}).fetchall()
+    if results:
+        return jsonify([dict(r._mapping) for r in results])
+    # Try without city
+    results = db.session.execute(text("CALL FindMatchingDonors(:bg, NULL)"), 
+                                {'bg': req.blood_group}).fetchall()
+    return jsonify([{**dict(r._mapping), 'out_of_city': True} for r in results])
 
 # --- Inventory API ---
 
@@ -220,6 +325,7 @@ def get_stats():
             (SELECT COUNT(*) FROM donors) as total_donors,
             (SELECT COUNT(*) FROM blood_requests WHERE status = 'pending') as pending_requests,
             (SELECT COUNT(*) FROM blood_requests WHERE status = 'fulfilled') as fulfilled_requests,
+            (SELECT COUNT(*) FROM donation_history WHERE DATE(donated_on) = CURDATE()) as matches_made_today,
             COUNT(d.donor_id) as active_donors_count 
         FROM donors d
         LEFT JOIN donation_history dh ON d.donor_id = dh.donor_id
@@ -276,7 +382,7 @@ def log_donation():
     )
     db.session.add(history)
     
-    # Note: inventory update and donor cooldown are now handled by SQLite triggers!
+    # Note: inventory update and donor cooldown are now handled by MySQL triggers!
     
     db.session.commit()
     return jsonify({'message': 'Donation logged successfully'}), 201
@@ -367,6 +473,8 @@ def user_profile():
             'blood_group': user.blood_group,
             'contact': user.contact,
             'city': user.city,
+            'donor_id': user.donor_id,
+            'last_donation_date': user.donor.last_donation_date.isoformat() if (user.donor and user.donor.last_donation_date) else None,
             'created_at': user.created_at.isoformat()
         },
         'requests': [request_to_dict(req) for req in requests]

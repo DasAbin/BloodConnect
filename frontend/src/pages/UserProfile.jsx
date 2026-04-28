@@ -83,6 +83,37 @@ const UserProfile = () => {
                 <span className="font-medium mr-2">Joined:</span> {new Date(user.created_at).toLocaleDateString()}
               </div>
             </div>
+
+            <div className="mt-8 pt-6 border-t border-gray-100">
+              <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">Donor Status</h4>
+              {!user.donor_id ? (
+                <div className="bg-primary-50 rounded-xl p-4">
+                  <p className="text-xs text-primary-700 mb-3">You aren't registered as a donor yet. Join us to save lives!</p>
+                  <button 
+                    onClick={() => navigate('/register')}
+                    className="w-full bg-primary-600 text-white text-sm font-bold py-2 rounded-lg hover:bg-primary-700 transition-colors"
+                  >
+                    Register as Donor
+                  </button>
+                </div>
+              ) : (
+                <div className="bg-gray-50 rounded-xl p-4">
+                  {(() => {
+                    if (!user.last_donation_date) return <p className="text-sm font-bold text-green-600">You are eligible to donate now ✓</p>
+                    const nextDate = new Date(user.last_donation_date)
+                    nextDate.setDate(nextDate.getDate() + 90)
+                    const today = new Date()
+                    if (today >= nextDate) return <p className="text-sm font-bold text-green-600">You are eligible to donate now ✓</p>
+                    return (
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Next eligible donation date:</p>
+                        <p className="text-sm font-bold text-primary-600">{nextDate.toLocaleDateString()}</p>
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

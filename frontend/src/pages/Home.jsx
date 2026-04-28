@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import axios from 'axios'
-import { Activity, Users, MapPin, Heart } from 'lucide-react'
+import { Activity, Users, MapPin, Heart, CheckCircle } from 'lucide-react'
 
 const Home = () => {
   const [stats, setStats] = useState({
     total_donors: 0,
     active_donors_count: 0,
     fulfilled_requests: 0,
+    matches_made_today: 0
   })
   const [shortages, setShortages] = useState([])
 
@@ -64,7 +65,7 @@ const Home = () => {
 
       {/* Stats Section */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 w-full flex-grow">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           <div className="bg-white rounded-2xl shadow-sm p-8 flex flex-col items-center border border-gray-100 hover:shadow-md transition-shadow">
             <div className="p-4 bg-blue-50 rounded-full mb-4">
               <Users className="h-8 w-8 text-blue-500" />
@@ -78,7 +79,15 @@ const Home = () => {
               <Heart className="h-8 w-8 text-green-500" />
             </div>
             <p className="text-4xl font-bold text-gray-900 mb-2">{stats.fulfilled_requests}</p>
-            <p className="text-gray-500 font-medium">Lives Saved (Fulfilled)</p>
+            <p className="text-gray-500 font-medium">Lives Saved</p>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-sm p-8 flex flex-col items-center border border-gray-100 hover:shadow-md transition-shadow">
+            <div className="p-4 bg-red-50 rounded-full mb-4">
+              <CheckCircle className="h-8 w-8 text-red-500" />
+            </div>
+            <p className="text-4xl font-bold text-gray-900 mb-2">{stats.matches_made_today || 0}</p>
+            <p className="text-gray-500 font-medium">Matches Today</p>
           </div>
           
           <div className="bg-white rounded-2xl shadow-sm p-8 flex flex-col items-center border border-gray-100 hover:shadow-md transition-shadow">
@@ -86,7 +95,7 @@ const Home = () => {
               <Activity className="h-8 w-8 text-purple-500" />
             </div>
             <p className="text-4xl font-bold text-gray-900 mb-2">{stats.active_donors_count}</p>
-            <p className="text-gray-500 font-medium">Active Donors Ready</p>
+            <p className="text-gray-500 font-medium">Active Donors</p>
           </div>
         </div>
       </div>

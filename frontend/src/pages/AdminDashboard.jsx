@@ -23,7 +23,9 @@ const AdminDashboard = () => {
   const [reports, setReports] = useState([])
   const [shortages, setShortages] = useState([])
   const [activeTab, setActiveTab] = useState('inventory')
-  const [modalData, setModalData] = useState({ isOpen: false, reqId: null, donorId: '', units: '' })
+  const [modalData, setModalData] = useState({ isOpen: false, reqId: null, donorId: '', units: '', fromInventory: false })
+  const [matchModal, setMatchModal] = useState({ isOpen: false, req: null, matches: [] })
+  const [eligibility, setEligibility] = useState({})
 
   axios.defaults.withCredentials = true
 
@@ -70,6 +72,11 @@ const AdminDashboard = () => {
     fetchData()
   }
 
+  const updateDonorApproval = async (id, status) => {
+    await axios.patch(`http://localhost:5000/api/donors/${id}`, { approval_status: status })
+    fetchData()
+  }
+
   const deleteDonor = async (id) => {
     if(window.confirm('Are you sure you want to delete this donor?')) {
       await axios.delete(`http://localhost:5000/api/donors/${id}`)
@@ -79,7 +86,8 @@ const AdminDashboard = () => {
 
   const updateRequestStatus = async (id, newStatus) => {
     if (newStatus === 'fulfilled') {
-      setModalData({ isOpen: true, reqId: id, donorId: '', units: '' })
+      const req = requests.find(r => r.request_id === id)
+      setModalData({ isOpen: true, reqId: id, donorId: '', units: req.units_needed, fromInventory: false })
     } else {
       await axios.patch(`http://localhost:5000/api/requests/${id}`, { status: newStatus })
       fetchData()
@@ -88,17 +96,65 @@ const AdminDashboard = () => {
 
   const submitDonation = async () => {
     try {
-      await axios.patch(`http://localhost:5000/api/requests/${modalData.reqId}`, { status: 'fulfilled' })
-      await axios.post('http://localhost:5000/api/donations', {
-        donor_id: parseInt(modalData.donorId),
-        request_id: modalData.reqId,
-        units_donated: parseInt(modalData.units)
+      await axios.patch(`http://localhost:5000/api/requests/${modalData.reqId}`, { 
+        status: 'fulfilled',
+        from_inventory: modalData.fromInventory
       })
-      alert('Donation logged successfully!')
-      setModalData({ isOpen: false, reqId: null, donorId: '', units: '' })
+      
+      if (!modalData.fromInventory) {
+        await axios.post('http://localhost:5000/api/donations', {
+          donor_id: parseInt(modalData.donorId),
+          request_id: modalData.reqId,
+          units_donated: parseInt(modalData.units)
+        })
+      }
+      
+      alert('Request fulfilled successfully!')
+      setModalData({ isOpen: false, reqId: null, donorId: '', units: '', fromInventory: false })
       fetchData()
     } catch(err) {
-      alert('Failed to log donation.')
+      alert(err.response?.data?.message || 'Failed to fulfill request.')
+    }
+  }
+
+  const checkEligibility = async (id) => {
+    try {
+      const res = await axios.get(`http://localhost:5000/api/donors/${id}/eligibility`)
+      setEligibility(prev => ({ ...prev, [id]: res.data.eligibility_status }))
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const findMatches = async (req) => {
+    try {
+      const res = await axios.get(`http://localhost:5000/api/requests/${req.request_id}/matches`)
+      setMatchModal({ isOpen: true, req, matches: res.data })
+    } catch (err) {
+      alert('Failed to find matches')
+    }
+  }
+
+  const assignMatch = async (donorId) => {
+    try {
+      // 1. Fulfil Request
+      await axios.patch(`http://localhost:5000/api/requests/${matchModal.req.request_id}`, { 
+        status: 'fulfilled',
+        from_inventory: false
+      })
+      
+      // 2. Log Donation
+      await axios.post('http://localhost:5000/api/donations', {
+        donor_id: donorId,
+        request_id: matchModal.req.request_id,
+        units_donated: matchModal.req.units_needed
+      })
+      
+      alert('Request fulfilled and donation logged!')
+      setMatchModal({ isOpen: false, req: null, matches: [] })
+      fetchData()
+    } catch (err) {
+      alert('Failed to assign donor')
     }
   }
 
@@ -112,6 +168,14 @@ const AdminDashboard = () => {
         <nav className="flex-1 px-4 space-y-2">
           <button onClick={() => setActiveTab('inventory')} className={`w-full text-left px-4 py-3 rounded-xl transition-colors ${activeTab === 'inventory' ? 'bg-white/20 font-bold' : 'hover:bg-white/10'}`}>Dashboard & Inventory</button>
           <button onClick={() => setActiveTab('donors')} className={`w-full text-left px-4 py-3 rounded-xl transition-colors ${activeTab === 'donors' ? 'bg-white/20 font-bold' : 'hover:bg-white/10'}`}>Manage Donors</button>
+          <button onClick={() => setActiveTab('approvals')} className={`w-full text-left px-4 py-3 rounded-xl transition-colors ${activeTab === 'approvals' ? 'bg-white/20 font-bold' : 'hover:bg-white/10'}`}>
+            Donor Approvals
+            {donors.filter(d => d.approval_status === 'pending').length > 0 && (
+              <span className="ml-2 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">
+                {donors.filter(d => d.approval_status === 'pending').length}
+              </span>
+            )}
+          </button>
           <button onClick={() => setActiveTab('requests')} className={`w-full text-left px-4 py-3 rounded-xl transition-colors ${activeTab === 'requests' ? 'bg-white/20 font-bold' : 'hover:bg-white/10'}`}>Manage Requests</button>
           <button onClick={() => setActiveTab('reports')} className={`w-full text-left px-4 py-3 rounded-xl transition-colors ${activeTab === 'reports' ? 'bg-white/20 font-bold' : 'hover:bg-white/10'}`}>Reports</button>
         </nav>
@@ -202,7 +266,14 @@ const AdminDashboard = () => {
                 {donors.map((donor, idx) => (
                   <tr key={donor.donor_id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{donor.donor_id}</td>
-                    <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{donor.name}</td>
+                    <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
+                      {donor.name}
+                      {eligibility[donor.donor_id] && (
+                        <span className={`ml-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase ${eligibility[donor.donor_id].includes('Eligible') && !eligibility[donor.donor_id].includes('Ineligible') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                          {eligibility[donor.donor_id]}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap"><span className={`px-2 py-1 rounded-full text-xs font-bold ${bloodGroupColors[donor.blood_group]}`}>{donor.blood_group}</span></td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{donor.city}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -211,6 +282,7 @@ const AdminDashboard = () => {
                         <span className="text-gray-400 flex items-center text-sm"><XCircle className="w-4 h-4 mr-1"/> Unavailable</span>}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
+                      <button onClick={() => checkEligibility(donor.donor_id)} className="text-primary-600 hover:text-primary-900">Check Eligibility</button>
                       <button onClick={() => toggleDonorAvailability(donor.donor_id, donor.is_available)} className="text-blue-600 hover:text-blue-900">Toggle Status</button>
                       <button onClick={() => deleteDonor(donor.donor_id)} className="text-red-600 hover:text-red-900">Delete</button>
                     </td>
@@ -259,7 +331,7 @@ const AdminDashboard = () => {
                          {req.status.toUpperCase()}
                        </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                       <select 
                         value={req.status} 
                         onChange={(e) => updateRequestStatus(req.request_id, e.target.value)}
@@ -269,6 +341,14 @@ const AdminDashboard = () => {
                         <option value="fulfilled">Fulfilled</option>
                         <option value="cancelled">Cancelled</option>
                       </select>
+                      {req.status === 'pending' && (
+                        <button 
+                          onClick={() => findMatches(req)}
+                          className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold hover:bg-blue-200"
+                        >
+                          Find Match
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -322,28 +402,45 @@ const AdminDashboard = () => {
           <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
             <h3 className="text-2xl font-bold text-gray-900 mb-6 text-center text-red-600">Fulfill Request</h3>
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Donor ID</label>
+              <div className="flex items-center space-x-2 bg-gray-50 p-3 rounded-lg border border-gray-100">
                 <input 
-                  type="number" 
-                  value={modalData.donorId} 
-                  onChange={e => setModalData({...modalData, donorId: e.target.value})}
-                  className="w-full rounded-lg border-gray-300 border p-2 focus:ring-red-500 focus:border-red-500" 
+                  type="checkbox" 
+                  id="fromInventory"
+                  checked={modalData.fromInventory} 
+                  onChange={e => setModalData({...modalData, fromInventory: e.target.checked})}
+                  className="rounded border-gray-300 text-red-600 focus:ring-red-500 h-4 w-4" 
                 />
+                <label htmlFor="fromInventory" className="text-sm font-semibold text-gray-700 cursor-pointer">
+                  Fulfill from existing inventory
+                </label>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Units Donated</label>
-                <input 
-                  type="number" 
-                  value={modalData.units} 
-                  onChange={e => setModalData({...modalData, units: e.target.value})}
-                  className="w-full rounded-lg border-gray-300 border p-2 focus:ring-red-500 focus:border-red-500" 
-                />
-              </div>
+
+              {!modalData.fromInventory && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Donor ID</label>
+                    <input 
+                      type="number" 
+                      value={modalData.donorId} 
+                      onChange={e => setModalData({...modalData, donorId: e.target.value})}
+                      className="w-full rounded-lg border-gray-300 border p-2 focus:ring-red-500 focus:border-red-500" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Units Donated</label>
+                    <input 
+                      type="number" 
+                      value={modalData.units} 
+                      onChange={e => setModalData({...modalData, units: e.target.value})}
+                      className="w-full rounded-lg border-gray-300 border p-2 focus:ring-red-500 focus:border-red-500" 
+                    />
+                  </div>
+                </>
+              )}
             </div>
             <div className="mt-8 flex justify-end space-x-3">
               <button 
-                onClick={() => setModalData({ isOpen: false, reqId: null, donorId: '', units: '' })}
+                onClick={() => setModalData({ isOpen: false, reqId: null, donorId: '', units: '', fromInventory: false })}
                 className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 Cancel
@@ -353,6 +450,70 @@ const AdminDashboard = () => {
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 shadow-sm transition-colors"
               >
                 Confirm Donation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {matchModal.isOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-2xl p-8 max-w-4xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <h3 className="text-2xl font-bold text-gray-900 mb-2">Matching Donors</h3>
+            <p className="text-gray-500 mb-6">Showing compatible donors for <span className="font-bold text-red-600">{matchModal.req.blood_group}</span> in <span className="font-bold">{matchModal.req.city}</span></p>
+            
+            <div className="flex-1 overflow-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Donor</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Group</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Donated</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {matchModal.matches.length === 0 ? (
+                    <tr><td colSpan="5" className="px-4 py-8 text-center text-gray-500">No matching donors found.</td></tr>
+                  ) : (
+                    matchModal.matches.map((m) => (
+                      <tr key={m.donor_id} className={m.out_of_city ? 'bg-orange-50/30' : ''}>
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          <div className="font-medium text-gray-900">{m.name}</div>
+                          <div className="text-xs text-gray-500">{m.phone}</div>
+                        </td>
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${bloodGroupColors[m.blood_group]}`}>{m.blood_group}</span>
+                        </td>
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          <div className="text-sm flex items-center">
+                            {m.city}
+                            {m.out_of_city && <span className="ml-2 bg-orange-100 text-orange-700 text-[10px] px-1.5 py-0.5 rounded-full font-bold">OTHER CITY</span>}
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{m.last_donated}</td>
+                        <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
+                          <button 
+                            onClick={() => assignMatch(m.donor_id)}
+                            className="bg-primary-600 text-white px-3 py-1.5 rounded-lg hover:bg-primary-700 shadow-sm"
+                          >
+                            Assign
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-8 flex justify-end">
+              <button 
+                onClick={() => setMatchModal({ isOpen: false, req: null, matches: [] })}
+                className="px-6 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-bold transition-colors"
+              >
+                Close
               </button>
             </div>
           </div>

@@ -8,6 +8,7 @@ import RequestBlood from './pages/RequestBlood'
 import UserLogin from './pages/UserLogin'
 import UserRegister from './pages/UserRegister'
 import UserProfile from './pages/UserProfile'
+import MyRequests from './pages/MyRequests'
 import AdminDashboard from './pages/AdminDashboard'
 
 axios.defaults.withCredentials = true
@@ -27,6 +28,7 @@ function App() {
             <Route path="/user/login" element={<UserLogin />} />
             <Route path="/user/register" element={<UserRegister />} />
             <Route path="/profile" element={<UserProfile />} />
+            <Route path="/my-requests" element={<MyRequests />} />
             <Route path="/admin" element={<AdminDashboard />} />
           </Routes>
         </main>

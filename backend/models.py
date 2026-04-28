@@ -14,6 +14,7 @@ class Donor(db.Model):
     city = db.Column(db.String(100), nullable=False)
     last_donation_date = db.Column(db.Date, nullable=True)
     is_available = db.Column(db.Boolean, default=True)
+    approval_status = db.Column(db.String(20), default='pending') # pending/approved/rejected
     registered_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     donations = db.relationship('DonationHistory', backref='donor', lazy=True)
@@ -54,6 +55,13 @@ class BloodInventory(db.Model):
     units_available = db.Column(db.Integer, default=0)
     last_updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+class BloodCompatibility(db.Model):
+    __tablename__ = 'blood_compatibility'
+    id = db.Column(db.Integer, primary_key=True)
+    recipient_group = db.Column(db.String(5), nullable=False)
+    donor_group = db.Column(db.String(5), nullable=False)
+    __table_args__ = (db.UniqueConstraint('recipient_group', 'donor_group', name='_recipient_donor_uc'),)
+
 class User(db.Model):
     __tablename__ = 'users'
     user_id = db.Column(db.Integer, primary_key=True)
@@ -65,6 +73,7 @@ class User(db.Model):
     blood_group = db.Column(db.String(5), nullable=True)
     contact = db.Column(db.String(20), nullable=True)
     city = db.Column(db.String(100), nullable=True)
+    donor_id = db.Column(db.Integer, db.ForeignKey('donors.donor_id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     requests = db.relationship('BloodRequest', backref='user', lazy=True)

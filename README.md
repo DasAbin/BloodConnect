@@ -4,7 +4,7 @@ A full-stack DBMS project designed to manage blood donations, donor availability
 
 ## 📊 Database Architecture
 
-The core of this project is a relational database implemented using **SQLite** and **SQLAlchemy (ORM)**.
+The core of this project is a relational database implemented using **MySQL/MariaDB** and **SQLAlchemy (ORM)**.
 
 ### Entity-Relationship (ER) Diagram
 
@@ -111,7 +111,7 @@ WHERE d.is_available = 1;
 ## 🛠️ Tech Stack
 - **Frontend**: React (Vite), Tailwind CSS, Lucide React (Icons).
 - **Backend**: Flask (Python), SQLAlchemy (ORM).
-- **Database**: SQLite.
+- **Database**: MySQL/MariaDB.
 - **State Management**: React Hooks & Context-like architecture.
 
 ---
@@ -122,7 +122,13 @@ WHERE d.is_available = 1;
 - Python 3.8+
 - Node.js 18+
 
-### 2. Backend Setup
+### 2. Database Setup
+Ensure you have MySQL or MariaDB running. Log into your MySQL shell:
+```sql
+CREATE DATABASE bloodconnect;
+```
+
+### 3. Backend Setup
 ```powershell
 cd backend
 python -m venv venv
@@ -130,7 +136,7 @@ python -m venv venv
 pip install -r requirements.txt
 python app.py
 ```
-*The database (`dbms_mini.db`) will be automatically created and seeded with sample data on the first run.*
+*The tables will be automatically created and seeded with sample data on the first run.*
 
 ### 3. Frontend Setup
 ```powershell

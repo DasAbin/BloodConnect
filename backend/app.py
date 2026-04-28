@@ -176,7 +176,8 @@ def manage_requests():
             units_needed=data['units_needed'],
             city=data['city'],
             contact=data['contact'],
-            urgency=data['urgency']
+            urgency=data['urgency'],
+            user_id=session.get('user_id')
         )
         db.session.add(new_req)
         db.session.commit()
@@ -313,7 +314,12 @@ def user_register():
     new_user = User(
         name=data['name'],
         email=data['email'],
-        password_hash=generate_password_hash(data['password'])
+        password_hash=generate_password_hash(data['password']),
+        age=data.get('age'),
+        dob=datetime.strptime(data['dob'], '%Y-%m-%d').date() if data.get('dob') else None,
+        blood_group=data.get('blood_group'),
+        contact=data.get('contact'),
+        city=data.get('city')
     )
     db.session.add(new_user)
     db.session.commit()
@@ -340,6 +346,31 @@ def user_check():
     if 'user_id' in session:
         return jsonify({'logged_in': True, 'name': session.get('user_name')})
     return jsonify({'logged_in': False}), 401
+
+@app.route('/api/user/profile', methods=['GET'])
+def user_profile():
+    if 'user_id' not in session:
+        return jsonify({'message': 'Unauthorized'}), 401
+    
+    user = User.query.get(session['user_id'])
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
+        
+    requests = BloodRequest.query.filter_by(user_id=user.user_id).order_by(BloodRequest.created_at.desc()).all()
+    
+    return jsonify({
+        'user': {
+            'name': user.name,
+            'email': user.email,
+            'age': user.age,
+            'dob': user.dob.isoformat() if user.dob else None,
+            'blood_group': user.blood_group,
+            'contact': user.contact,
+            'city': user.city,
+            'created_at': user.created_at.isoformat()
+        },
+        'requests': [request_to_dict(req) for req in requests]
+    })
 
 if __name__ == '__main__':
     app.run(port=5000, debug=True)

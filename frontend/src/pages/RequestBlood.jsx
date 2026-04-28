@@ -1,7 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import axios from 'axios'
+import { useNavigate } from 'react-router-dom'
 
 const RequestBlood = () => {
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!localStorage.getItem('userLoggedIn') && !localStorage.getItem('isAdmin')) {
+      alert('You must be logged in to request blood.')
+      navigate('/user/login')
+    }
+  }, [navigate])
   const [formData, setFormData] = useState({
     requester_name: '',
     blood_group: 'A+',

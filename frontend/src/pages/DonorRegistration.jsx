@@ -1,9 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 
 const DonorRegistration = () => {
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!localStorage.getItem('userLoggedIn') && !localStorage.getItem('isAdmin')) {
+      alert('You must be logged in to register as a donor.')
+      navigate('/user/login')
+    }
+  }, [navigate])
   const [formData, setFormData] = useState({
     name: '',
     age: '',

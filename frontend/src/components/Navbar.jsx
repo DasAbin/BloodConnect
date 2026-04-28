@@ -54,10 +54,10 @@ const Navbar = () => {
             
             {userName || isAdmin ? (
               <div className="flex items-center space-x-4 ml-2 border-l pl-4">
-                <span className="text-sm font-medium text-gray-700 flex items-center">
+                <Link to={isAdmin ? "/admin" : "/profile"} className="text-sm font-medium text-gray-700 flex items-center hover:text-primary-600 transition-colors">
                   <User className="h-4 w-4 mr-1" />
                   {isAdmin ? 'Admin' : userName}
-                </span>
+                </Link>
                 <button 
                   onClick={handleLogout}
                   className="text-gray-500 hover:text-red-600 transition-colors"
@@ -65,11 +65,6 @@ const Navbar = () => {
                 >
                   <LogOut className="h-5 w-5" />
                 </button>
-                {isAdmin && (
-                  <Link to="/admin" className="text-primary-600 font-medium text-sm hover:underline">
-                    Dashboard
-                  </Link>
-                )}
               </div>
             ) : (
               <Link to="/user/login" className="text-gray-600 hover:text-primary-600 px-3 py-2 rounded-md font-medium transition-colors">

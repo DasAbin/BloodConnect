@@ -29,6 +29,7 @@ class BloodRequest(db.Model):
     urgency = db.Column(db.String(20), nullable=False) # critical/high/normal
     status = db.Column(db.String(20), default='pending') # pending/fulfilled/cancelled
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=True)
     
     donations = db.relationship('DonationHistory', backref='blood_request', lazy=True)
 
@@ -59,4 +60,11 @@ class User(db.Model):
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(100), unique=True, nullable=False)
     password_hash = db.Column(db.String(200), nullable=False)
+    age = db.Column(db.Integer, nullable=True)
+    dob = db.Column(db.Date, nullable=True)
+    blood_group = db.Column(db.String(5), nullable=True)
+    contact = db.Column(db.String(20), nullable=True)
+    city = db.Column(db.String(100), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    requests = db.relationship('BloodRequest', backref='user', lazy=True)

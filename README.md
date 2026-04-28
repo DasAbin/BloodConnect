@@ -1,34 +1,131 @@
-# Blood Donation Management System
+# Blood Donation Management System (BloodConnect)
 
-A full-stack web application built with React, Vite, Tailwind CSS, Flask, and SQLite.
+A full-stack DBMS project designed to manage blood donations, donor availability, and emergency blood requests. This application demonstrates database design principles, including relational mapping, complex queries, and data integrity.
 
-## Project Structure
-- `frontend/` - React application
-- `backend/` - Flask API and database
+## 📊 Database Architecture
 
-## Setup and Running
+The core of this project is a relational database implemented using **SQLite** and **SQLAlchemy (ORM)**.
 
-### 1. Backend
-The database will be automatically created and seeded with an admin user, blood groups, and dummy donors on the first run.
+### Entity-Relationship (ER) Diagram
 
-```bash
+```mermaid
+erDiagram
+    DONORS ||--o{ DONATION_HISTORY : "donates"
+    BLOOD_REQUESTS ||--o{ DONATION_HISTORY : "fulfills"
+    BLOOD_GROUPS ||--|| BLOOD_INVENTORY : "tracks"
+
+    DONORS {
+        int donor_id PK
+        string name
+        int age
+        string gender
+        string blood_group
+        string phone
+        string city
+        date last_donation_date
+        boolean is_available
+        datetime registered_at
+    }
+
+    BLOOD_REQUESTS {
+        int request_id PK
+        string requester_name
+        string blood_group
+        int units_needed
+        string city
+        string contact
+        string urgency
+        string status
+        datetime created_at
+    }
+
+    DONATION_HISTORY {
+        int history_id PK
+        int donor_id FK
+        int request_id FK
+        datetime donated_on
+        int units_donated
+    }
+
+    BLOOD_INVENTORY {
+        int inventory_id PK
+        string blood_group UK
+        int units_available
+        datetime last_updated
+    }
+
+    ADMINS {
+        int admin_id PK
+        string username UK
+        string password_hash
+    }
+```
+
+### Table Definitions & Constraints
+
+1.  **Donors**: Stores donor profiles. Uses a boolean flag `is_available` to filter eligible donors.
+2.  **Blood Requests**: Tracks patient needs. Includes `urgency` levels (Critical, High, Normal) and `status` (Pending, Fulfilled).
+3.  **Donation History**: A junction-style table that logs every donation event, linking a `Donor` to a specific `BloodRequest` (if applicable).
+4.  **Blood Inventory**: Maintains real-time stock levels for each blood group.
+5.  **Admins**: Stores hashed credentials for the management portal.
+
+---
+
+## 🔍 Key SQL Implementations
+
+This project goes beyond simple CRUD by utilizing complex SQL queries for dashboard analytics.
+
+### Analytics Aggregation
+The dashboard statistics are fetched using a single optimized SQL query involving subqueries and joins to provide a snapshot of the entire system state:
+
+```sql
+SELECT 
+    (SELECT COUNT(*) FROM donors) as total_donors,
+    (SELECT COUNT(*) FROM blood_requests WHERE status = 'pending') as pending_requests,
+    (SELECT COUNT(*) FROM blood_requests WHERE status = 'fulfilled') as fulfilled_requests,
+    COUNT(d.donor_id) as active_donors_count 
+FROM donors d
+LEFT JOIN donation_history dh ON d.donor_id = dh.donor_id
+WHERE d.is_available = 1;
+```
+
+---
+
+## 🛠️ Tech Stack
+- **Frontend**: React (Vite), Tailwind CSS, Lucide React (Icons).
+- **Backend**: Flask (Python), SQLAlchemy (ORM).
+- **Database**: SQLite.
+- **State Management**: React Hooks & Context-like architecture.
+
+---
+
+## 🚀 Setup & Execution
+
+### 1. Prerequisites
+- Python 3.8+
+- Node.js 18+
+
+### 2. Backend Setup
+```powershell
 cd backend
 python -m venv venv
-.\venv\Scripts\activate  # Windows
+.\venv\Scripts\activate
 pip install -r requirements.txt
 python app.py
 ```
-The backend API will run on `http://127.0.0.1:5000`
+*The database (`dbms_mini.db`) will be automatically created and seeded with sample data on the first run.*
 
-### 2. Frontend
-```bash
+### 3. Frontend Setup
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
-The frontend will be available at `http://localhost:5173`
+Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-## Admin Panel
-- **URL**: `http://localhost:5173/admin/login`
+---
+
+## 🔐 Admin Credentials
+Access the admin portal at `/admin/login`.
 - **Username**: `admin`
 - **Password**: `admin123`

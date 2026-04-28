@@ -9,17 +9,22 @@ const Home = () => {
     active_donors_count: 0,
     fulfilled_requests: 0,
   })
+  const [shortages, setShortages] = useState([])
 
   useEffect(() => {
-    const fetchStats = async () => {
+    const fetchData = async () => {
       try {
-        const res = await axios.get('http://localhost:5000/api/stats')
-        setStats(res.data)
+        const [statsRes, shortageRes] = await Promise.all([
+          axios.get('http://localhost:5000/api/stats'),
+          axios.get('http://localhost:5000/api/shortage')
+        ])
+        setStats(statsRes.data)
+        setShortages(shortageRes.data)
       } catch (err) {
-        console.error("Error fetching stats:", err)
+        console.error("Error fetching data:", err)
       }
     }
-    fetchStats()
+    fetchData()
   }, [])
 
   return (
@@ -47,6 +52,15 @@ const Home = () => {
           </div>
         </div>
       </div>
+      
+      {shortages.length > 0 && (
+        <div className="bg-red-600 text-white py-2 overflow-hidden whitespace-nowrap shadow-inner">
+          <div className="animate-[marquee_20s_linear_infinite] inline-block font-semibold">
+            <span className="mx-4">⚠ URGENT: Low stock for [{shortages.map(s => s.blood_group).join(', ')}] — donors needed immediately</span>
+            <span className="mx-4">⚠ URGENT: Low stock for [{shortages.map(s => s.blood_group).join(', ')}] — donors needed immediately</span>
+          </div>
+        </div>
+      )}
 
       {/* Stats Section */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 w-full flex-grow">

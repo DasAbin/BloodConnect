@@ -19,6 +19,54 @@ db.init_app(app)
 with app.app_context():
     db.create_all()
     seed_db()
+    
+    # Initialize SQLite triggers and views
+    db.session.execute(text("""
+        CREATE TRIGGER IF NOT EXISTS prevent_negative_inventory
+        BEFORE UPDATE ON blood_inventory
+        FOR EACH ROW
+        WHEN NEW.units_available < 0
+        BEGIN
+          SELECT RAISE(ABORT, 'Insufficient blood units in inventory');
+        END;
+    """))
+    db.session.execute(text("""
+        CREATE TRIGGER IF NOT EXISTS donor_cooldown_after_donation
+        AFTER INSERT ON donation_history
+        FOR EACH ROW
+        BEGIN
+          UPDATE donors 
+          SET is_available = 0, last_donation_date = DATE('now')
+          WHERE donor_id = NEW.donor_id;
+        END;
+    """))
+    db.session.execute(text("""
+        CREATE TRIGGER IF NOT EXISTS auto_increment_inventory
+        AFTER INSERT ON donation_history
+        FOR EACH ROW
+        BEGIN
+          UPDATE blood_inventory
+          SET units_available = units_available + NEW.units_donated,
+              last_updated = DATETIME('now')
+          WHERE blood_group = (SELECT blood_group FROM donors WHERE donor_id = NEW.donor_id);
+        END;
+    """))
+    db.session.execute(text("""
+        CREATE VIEW IF NOT EXISTS eligible_donors AS
+        SELECT donor_id, name, blood_group, city, phone
+        FROM donors
+        WHERE is_available = 1
+        AND (last_donation_date IS NULL OR 
+             CAST((JULIANDAY('now') - JULIANDAY(last_donation_date)) AS INTEGER) >= 90);
+    """))
+    db.session.execute(text("""
+        CREATE VIEW IF NOT EXISTS blood_shortage AS
+        SELECT blood_group, units_available
+        FROM blood_inventory
+        WHERE units_available < 5;
+    """))
+    db.session.commit()
+
 
 # --- Helpers ---
 def donor_to_dict(donor):
@@ -91,6 +139,7 @@ def update_donor(id):
 def search_donors():
     blood_group = request.args.get('blood_group')
     city = request.args.get('city')
+    available_only = request.args.get('available_only')
     
     query = Donor.query
     if blood_group:
@@ -98,6 +147,8 @@ def search_donors():
     if city:
         # Case insensitive like
         query = query.filter(Donor.city.ilike(f"%{city}%"))
+    if available_only == 'true':
+        query = query.filter_by(is_available=True)
         
     donors = query.all()
     return jsonify([donor_to_dict(d) for d in donors])
@@ -129,6 +180,10 @@ def update_request(id):
     req = BloodRequest.query.get_or_404(id)
     data = request.json
     if 'status' in data:
+        if data['status'] == 'fulfilled' and req.status != 'fulfilled':
+            inventory = BloodInventory.query.filter_by(blood_group=req.blood_group).first()
+            if inventory:
+                inventory.units_available -= req.units_needed
         req.status = data['status']
     db.session.commit()
     return jsonify(request_to_dict(req))
@@ -171,6 +226,31 @@ def get_stats():
         'active_donors_count': result.active_donors_count
     })
 
+@app.route('/api/reports', methods=['GET'])
+def get_reports():
+    sql = text("""
+        SELECT 
+          d.blood_group,
+          COUNT(DISTINCT d.donor_id) as total_donors,
+          SUM(CASE WHEN d.is_available = 1 THEN 1 ELSE 0 END) as available_donors,
+          COALESCE(SUM(dh.units_donated), 0) as total_donated,
+          bi.units_available as current_stock,
+          CASE WHEN bi.units_available < 5 THEN 'LOW' ELSE 'OK' END as stock_status
+        FROM donors d
+        LEFT JOIN donation_history dh ON d.donor_id = dh.donor_id
+        JOIN blood_inventory bi ON d.blood_group = bi.blood_group
+        GROUP BY d.blood_group, bi.units_available
+        ORDER BY bi.units_available ASC
+    """)
+    results = db.session.execute(sql).fetchall()
+    return jsonify([dict(r._mapping) for r in results])
+
+@app.route('/api/shortage', methods=['GET'])
+def get_shortage():
+    sql = text("SELECT * FROM blood_shortage")
+    results = db.session.execute(sql).fetchall()
+    return jsonify([dict(r._mapping) for r in results])
+
 # --- Donations API ---
 
 @app.route('/api/donations', methods=['POST'])
@@ -188,15 +268,8 @@ def log_donation():
     )
     db.session.add(history)
     
-    # update inventory
-    donor = Donor.query.get(donor_id)
-    inventory = BloodInventory.query.filter_by(blood_group=donor.blood_group).first()
-    if inventory:
-        inventory.units_available += units_donated
-        
-    # update donor last_donation
-    donor.last_donation_date = datetime.utcnow().date()
-        
+    # Note: inventory update and donor cooldown are now handled by SQLite triggers!
+    
     db.session.commit()
     return jsonify({'message': 'Donation logged successfully'}), 201
 

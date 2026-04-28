@@ -20,7 +20,10 @@ const AdminDashboard = () => {
   const [inventory, setInventory] = useState([])
   const [donors, setDonors] = useState([])
   const [requests, setRequests] = useState([])
+  const [reports, setReports] = useState([])
+  const [shortages, setShortages] = useState([])
   const [activeTab, setActiveTab] = useState('inventory')
+  const [modalData, setModalData] = useState({ isOpen: false, reqId: null, donorId: '', units: '' })
 
   axios.defaults.withCredentials = true
 
@@ -34,16 +37,20 @@ const AdminDashboard = () => {
 
   const fetchData = async () => {
     try {
-      const [statsRes, invRes, donRes, reqRes] = await Promise.all([
+      const [statsRes, invRes, donRes, reqRes, repRes, shortRes] = await Promise.all([
         axios.get('http://localhost:5000/api/stats'),
         axios.get('http://localhost:5000/api/inventory'),
         axios.get('http://localhost:5000/api/donors'),
-        axios.get('http://localhost:5000/api/requests')
+        axios.get('http://localhost:5000/api/requests'),
+        axios.get('http://localhost:5000/api/reports'),
+        axios.get('http://localhost:5000/api/shortage')
       ])
       setStats(statsRes.data)
       setInventory(invRes.data)
       setDonors(donRes.data)
       setRequests(reqRes.data)
+      setReports(repRes.data)
+      setShortages(shortRes.data)
     } catch (err) {
       console.error(err)
     }
@@ -71,26 +78,28 @@ const AdminDashboard = () => {
   }
 
   const updateRequestStatus = async (id, newStatus) => {
-    await axios.patch(`http://localhost:5000/api/requests/${id}`, { status: newStatus })
     if (newStatus === 'fulfilled') {
-      const donorId = prompt('Enter the Donor ID who fulfilled this request:')
-      if (donorId) {
-        const units = prompt('Enter units donated:')
-        if (units) {
-          try {
-            await axios.post('http://localhost:5000/api/donations', {
-              donor_id: parseInt(donorId),
-              request_id: id,
-              units_donated: parseInt(units)
-            })
-            alert('Donation logged successfully!')
-          } catch(err) {
-            alert('Failed to log donation.')
-          }
-        }
-      }
+      setModalData({ isOpen: true, reqId: id, donorId: '', units: '' })
+    } else {
+      await axios.patch(`http://localhost:5000/api/requests/${id}`, { status: newStatus })
+      fetchData()
     }
-    fetchData()
+  }
+
+  const submitDonation = async () => {
+    try {
+      await axios.patch(`http://localhost:5000/api/requests/${modalData.reqId}`, { status: 'fulfilled' })
+      await axios.post('http://localhost:5000/api/donations', {
+        donor_id: parseInt(modalData.donorId),
+        request_id: modalData.reqId,
+        units_donated: parseInt(modalData.units)
+      })
+      alert('Donation logged successfully!')
+      setModalData({ isOpen: false, reqId: null, donorId: '', units: '' })
+      fetchData()
+    } catch(err) {
+      alert('Failed to log donation.')
+    }
   }
 
   return (
@@ -104,6 +113,7 @@ const AdminDashboard = () => {
           <button onClick={() => setActiveTab('inventory')} className={`w-full text-left px-4 py-3 rounded-xl transition-colors ${activeTab === 'inventory' ? 'bg-white/20 font-bold' : 'hover:bg-white/10'}`}>Dashboard & Inventory</button>
           <button onClick={() => setActiveTab('donors')} className={`w-full text-left px-4 py-3 rounded-xl transition-colors ${activeTab === 'donors' ? 'bg-white/20 font-bold' : 'hover:bg-white/10'}`}>Manage Donors</button>
           <button onClick={() => setActiveTab('requests')} className={`w-full text-left px-4 py-3 rounded-xl transition-colors ${activeTab === 'requests' ? 'bg-white/20 font-bold' : 'hover:bg-white/10'}`}>Manage Requests</button>
+          <button onClick={() => setActiveTab('reports')} className={`w-full text-left px-4 py-3 rounded-xl transition-colors ${activeTab === 'reports' ? 'bg-white/20 font-bold' : 'hover:bg-white/10'}`}>Reports</button>
         </nav>
         <div className="p-4">
           <button onClick={handleLogout} className="w-full flex items-center justify-center px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl transition-colors">
@@ -114,8 +124,15 @@ const AdminDashboard = () => {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-auto p-8">
+      <div className="flex-1 overflow-auto p-8 relative">
         
+        {shortages.length > 0 && activeTab === 'reports' && (
+          <div className="mb-6 bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded shadow-sm flex items-center">
+            <span className="font-bold mr-2">⚠ Low Stock Alert:</span>
+            <span>{shortages.map(s => s.blood_group).join(', ')}</span>
+          </div>
+        )}
+
         {/* Stats Row */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
@@ -260,7 +277,87 @@ const AdminDashboard = () => {
           </div>
         )}
 
+        {activeTab === 'reports' && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-6 py-5 border-b border-gray-100 bg-gray-50/50">
+              <h3 className="text-lg font-bold text-gray-900">Inventory Reports</h3>
+            </div>
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Blood Group</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Donors</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Available</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Donated</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {reports.map((rep, idx) => (
+                  <tr key={rep.blood_group} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                    <td className="px-6 py-4 whitespace-nowrap"><span className={`px-2 py-1 rounded-full text-xs font-bold ${bloodGroupColors[rep.blood_group]}`}>{rep.blood_group}</span></td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{rep.total_donors}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{rep.available_donors}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{rep.total_donated}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{rep.current_stock}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      {rep.stock_status === 'LOW' ? (
+                        <span className="bg-red-100 text-red-800 px-2 py-1 rounded-full font-bold text-xs">LOW</span>
+                      ) : (
+                        <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full font-bold text-xs">OK</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
       </div>
+
+      {modalData.isOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
+            <h3 className="text-2xl font-bold text-gray-900 mb-6 text-center text-red-600">Fulfill Request</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Donor ID</label>
+                <input 
+                  type="number" 
+                  value={modalData.donorId} 
+                  onChange={e => setModalData({...modalData, donorId: e.target.value})}
+                  className="w-full rounded-lg border-gray-300 border p-2 focus:ring-red-500 focus:border-red-500" 
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Units Donated</label>
+                <input 
+                  type="number" 
+                  value={modalData.units} 
+                  onChange={e => setModalData({...modalData, units: e.target.value})}
+                  className="w-full rounded-lg border-gray-300 border p-2 focus:ring-red-500 focus:border-red-500" 
+                />
+              </div>
+            </div>
+            <div className="mt-8 flex justify-end space-x-3">
+              <button 
+                onClick={() => setModalData({ isOpen: false, reqId: null, donorId: '', units: '' })}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={submitDonation}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 shadow-sm transition-colors"
+              >
+                Confirm Donation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

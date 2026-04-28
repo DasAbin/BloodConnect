@@ -13,14 +13,26 @@ const bloodGroupColors = {
   'O-': 'bg-emerald-100 text-emerald-800',
 }
 
+const compatibilityMap = {
+  'O-': 'All groups',
+  'O+': 'O+, A+, B+, AB+',
+  'A-': 'A-, A+, AB-, AB+',
+  'A+': 'A+, AB+',
+  'B-': 'B-, B+, AB-, AB+',
+  'B+': 'B+, AB+',
+  'AB-': 'AB-, AB+',
+  'AB+': 'AB+ only'
+}
+
 const SearchDonors = () => {
   const [donors, setDonors] = useState([])
   const [bloodGroup, setBloodGroup] = useState('')
   const [city, setCity] = useState('')
+  const [availableOnly, setAvailableOnly] = useState(true)
 
   const fetchDonors = async () => {
     try {
-      const res = await axios.get(`http://localhost:5000/api/donors/search?blood_group=${encodeURIComponent(bloodGroup)}&city=${encodeURIComponent(city)}`)
+      const res = await axios.get(`http://localhost:5000/api/donors/search?blood_group=${encodeURIComponent(bloodGroup)}&city=${encodeURIComponent(city)}&available_only=${availableOnly}`)
       setDonors(res.data)
     } catch (err) {
       console.error(err)
@@ -56,6 +68,18 @@ const SearchDonors = () => {
           <div className="flex-1">
             <input type="text" placeholder="City" value={city} onChange={(e) => setCity(e.target.value)} className="w-full rounded-lg border-gray-300 border p-3 focus:ring-primary-500 focus:border-primary-500" />
           </div>
+          <div className="flex items-center px-4">
+            <input 
+              type="checkbox" 
+              id="availableOnly" 
+              checked={availableOnly} 
+              onChange={(e) => setAvailableOnly(e.target.checked)}
+              className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+            />
+            <label htmlFor="availableOnly" className="ml-2 block text-sm text-gray-900">
+              Show available donors only
+            </label>
+          </div>
           <button type="submit" className="bg-primary-600 text-white px-8 py-3 rounded-lg hover:bg-primary-700 flex items-center justify-center font-medium transition-colors">
             <Search className="w-5 h-5 mr-2" />
             Search
@@ -65,7 +89,7 @@ const SearchDonors = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {donors.map(donor => (
-          <div key={donor.donor_id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+          <div key={donor.donor_id} className={`bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow ${!donor.is_available ? 'opacity-50' : ''}`}>
             <div className="flex justify-between items-start mb-4">
               <div>
                 <h3 className="text-xl font-bold text-gray-900">{donor.name}</h3>
@@ -74,9 +98,12 @@ const SearchDonors = () => {
                   <span className="text-sm">{donor.city}</span>
                 </div>
               </div>
-              <span className={`px-3 py-1 rounded-full text-sm font-bold ${bloodGroupColors[donor.blood_group] || 'bg-gray-100'}`}>
-                {donor.blood_group}
-              </span>
+              <div className="flex flex-col items-end">
+                <span className={`px-3 py-1 rounded-full text-sm font-bold ${bloodGroupColors[donor.blood_group] || 'bg-gray-100'}`}>
+                  {donor.blood_group}
+                </span>
+                <span className="text-xs text-gray-500 mt-1">Donates to: {compatibilityMap[donor.blood_group]}</span>
+              </div>
             </div>
             
             <div className="flex items-center mb-4">
@@ -91,7 +118,7 @@ const SearchDonors = () => {
                 )}
               </span>
               <span className="text-sm font-medium text-gray-700">
-                {donor.is_available ? 'Available' : 'Unavailable'}
+                {donor.is_available ? 'Available' : <span className="bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full text-xs ml-1">Unavailable</span>}
               </span>
             </div>
 

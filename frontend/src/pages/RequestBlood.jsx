@@ -68,11 +68,11 @@ const RequestBlood = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Patient / Requester Name</label>
-              <input type="text" name="requester_name" value={formData.requester_name} required disabled={isLoggedIn} onChange={handleChange} className="w-full rounded-lg border-gray-300 border p-2.5 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500" />
+              <input type="text" name="requester_name" value={formData.requester_name} required onChange={handleChange} className="w-full rounded-lg border-gray-300 border p-2.5 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Blood Group Needed</label>
-              <select name="blood_group" value={formData.blood_group} disabled={isLoggedIn} onChange={handleChange} className="w-full rounded-lg border-gray-300 border p-2.5 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500">
+              <select name="blood_group" value={formData.blood_group} onChange={handleChange} className="w-full rounded-lg border-gray-300 border p-2.5 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500">
                 {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bg => (
                   <option key={bg} value={bg}>{bg}</option>
                 ))}
@@ -84,11 +84,11 @@ const RequestBlood = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-              <input type="text" name="city" value={formData.city} required disabled={isLoggedIn} onChange={handleChange} className="w-full rounded-lg border-gray-300 border p-2.5 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500" />
+              <input type="text" name="city" value={formData.city} required onChange={handleChange} className="w-full rounded-lg border-gray-300 border p-2.5 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Contact Number</label>
-              <input type="tel" name="contact" value={formData.contact} required disabled={isLoggedIn} onChange={handleChange} className="w-full rounded-lg border-gray-300 border p-2.5 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500" />
+              <input type="tel" name="contact" value={formData.contact} required onChange={handleChange} className="w-full rounded-lg border-gray-300 border p-2.5 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500" />
             </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-2">Urgency Level</label>

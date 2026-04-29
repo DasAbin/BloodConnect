@@ -450,7 +450,11 @@ def user_logout():
 @app.route('/api/user/check', methods=['GET'])
 def user_check():
     if 'user_id' in session:
-        return jsonify({'logged_in': True, 'name': session.get('user_name')})
+        user = db.session.get(User, session['user_id'])
+        if user:
+            return jsonify({'logged_in': True, 'name': user.name})
+        else:
+            session.clear()
     return jsonify({'logged_in': False}), 401
 
 @app.route('/api/user/profile', methods=['GET'])
@@ -458,12 +462,19 @@ def user_profile():
     if 'user_id' not in session:
         return jsonify({'message': 'Unauthorized'}), 401
     
-    user = User.query.get(session['user_id'])
+    user = db.session.get(User, session['user_id'])
     if not user:
+        session.clear()
         return jsonify({'message': 'User not found'}), 404
         
     requests = BloodRequest.query.filter_by(user_id=user.user_id).order_by(BloodRequest.created_at.desc()).all()
     
+    donor_info = None
+    if user.donor_id:
+        donor = db.session.get(Donor, user.donor_id)
+        if donor:
+            donor_info = donor
+            
     return jsonify({
         'user': {
             'name': user.name,
@@ -474,7 +485,7 @@ def user_profile():
             'contact': user.contact,
             'city': user.city,
             'donor_id': user.donor_id,
-            'last_donation_date': user.donor.last_donation_date.isoformat() if (user.donor and user.donor.last_donation_date) else None,
+            'last_donation_date': donor_info.last_donation_date.isoformat() if (donor_info and donor_info.last_donation_date) else None,
             'created_at': user.created_at.isoformat()
         },
         'requests': [request_to_dict(req) for req in requests]
